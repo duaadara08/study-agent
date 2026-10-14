@@ -47,56 +47,50 @@ const tools = [
     ],
   },
 ];
+
+
 //okay so basically its for the model it doenst run this part this just helps the model understand what it can do and how to do it. like the name read file and the description and the parameters it needs to run it.and one input which is path it is mandatory (ALL OF THIS IS BASICALLY JUST DATA NOT ANYTHIGN TO RUN )
 //this can have multiple things like our first is read file the second could be search web third could be save note 
-const response = await generate({
-    model: "gemini-3.5-flash-lite",
-    contents:"Summarize my notes in notes.txt",
-    config:{tools},
-});
-// so when the person is chatting with the ai model and asks for summarising the notes so when config tools is run it goes to tools checks which one matches what the user asked for closest is rrad notes so it asks for that if someone says look up what lillies are it will go to search web tool 
-//await basically waits for the response back cuz if we dont have await the program will go to the next line without wiaitng for th e answer
+
+//The model itself remembers nothing. The list is the memory, and you carry it for the model.It’s a list stored on your computer, and it holds the conversation so far. At the start it has one entry, your question:
+
+const contents = [
+    {role:"user",parts:[{text:"Summarize my notes in notes.txt"}]},
+];
+//Turn the two calls into a loop. One generate call inside a while loop that repeats until the model stops asking for tools. This lets the agent make as many tool calls as it needs.
+//so we have a loop because we dont want to run the model once but multiple times where the user can ask multiple questions so  what we changes is we added a while loop that keeps on running till no tool request each loop it sends the whole contents list ,so the model can see evrything happened so far on lap 1 its just my question on seocnd lap its my question plus the models tool request plus the text file 
+while(true){
+    const response = await generate({
+        model:"gemini-3.5-flash-lite",
+        contents:contents,
+        config:{tools},
+    });
+// no tool request means the model is done: print the answer and stop 
+//If the condition is true (no tool request): run the code inside the braces. Print the answer, then break leaves the loop and the program ends.
+//If the condition is false (there is a tool request): skip everything inside the braces and continue to the lines below, which run the tool and add the result to contents. Then the loop goes back to the top for another lap.
+    if(!response.functionCalls){
+        console.log(response.text);
+        break;}
+
+    
+
+    //model wants the tool:save the original reply like we did previously 
+
+     contents.push(response.candidates[0].content);
+
+     //we take the models request and run the ral function with the path it gave 
+const call=response.functionCalls[0];
+const fileText=readFile(call.args.path);
 
 
-const call = response.functionCalls[0];//grabs the first request the model made
-
-if (call.name === "read_file") {//checks which tool it asked for then runs your real readFile with the path model gave
-  const fileText = readFile(call.args.path);
-//sends the whole conversation so far:your question,the model tools request and the file contects as the tools result.the mdoel has nomemeory between calls so u have to resend each time
-  const secondResponse = await generate({
-    model: "gemini-3.5-flash-lite",
-    contents: [
-      { role: "user", parts: [{ text: "Summarize my notes in notes.txt" }] },
-     response.candidates[0].content,
-      {
-        role: "user",
-        parts: [
-          {
-            functionResponse: {
-              name: call.name,
-              response: { result: fileText },
+contents.push({ role:"user",
+    parts:[
+        {
+            functionResponse:{
+                name:call.name,
+                response:{result:fileText},
             },
-          },
-        ],
-      },
+        },
     ],
-    config: { tools },
-  });
-
-  console.log(secondResponse.text);//actual summary
+});
 }
-
-
-
-
-//so the (line 37) it goes to check the tools which one matches what the user asked and waits for google gemini response when the response is back it will be stored in the VARIABLE response the response will basically be "please run read_file with notes.txt".
-//(line 46)grabs the model request so the first request the model made is stored in the variable call.which is basically again { name: 'read_file', args: { path: 'notes.txt' } } what the reponse said 
-//(line 48) checks which tool it asked for then runs your real readFile with the path model gave
-
-//NOTE:the model does not remember what it was aksed for cuz the repsonse is not stored in model it is local on your computer so you have to define a few things again and why are we writing the model again we just have to everytime we ask fro something 
-
-//(line 49)now the code has read the file and has the text if u  only sent the file tetc the model would have no idea why we are sending it so you hand it the information again that basically containsthe whole thinh what the user originally asked summarise the notes what the model said it wanted which is run read_file on notes.txt  and what came back the actual text from the file
-
-//(line 60)function response:is basically "i ran it here's the result" the model cant run tools so u speak for the tool thats why call.name and repsonse 
-
-//(line 70) so basically this is the actual response from the call one rigth which was saved in response instead of typing out role: "model", parts: [{ functionCall: call }]  we use the response.candidates[0].content which is the same thing but shorter and easier to read and it conatins a signature like a code that google gemini understands 
