@@ -1,10 +1,12 @@
-import "dotenv/config"; // reads my env file 
-import fs from "fs"; //lets code read files on my computer
-import {GoogleGenAI} from "@google/genai";//brings library thta knows how to talk to Gemini API
+import "dotenv/config"; 
+import fs from "fs"; 
+import {GoogleGenAI} from "@google/genai";
+import readline from "readline/promises";
 
-const ai = new GoogleGenAI ({apikey: process.env.GEMINI_API_KEY});//creates object ai - we give it our API key -Use ai whenever we want to talk to our model 
+const ai = new GoogleGenAI ({apiKey: process.env.GEMINI_API_KEY});//creates object ai - we give it our API 
 
-//incase the model is busy we can retry a few times before giving up
+const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+
 
 async function generate(request) {
   for (let attempt = 1; attempt <= 5; attempt++) {
@@ -20,7 +22,9 @@ async function generate(request) {
 
 
 
-function readFile(path) {//takes a file path, tries to read that file as text, and returns the contents
+
+
+function readFile(path) {
     try{
         return fs.readFileSync(path,"utf-8");
     }
@@ -29,6 +33,8 @@ function readFile(path) {//takes a file path, tries to read that file as text, a
 
     }
 }
+
+
 
 function saveNote(filename, content) {
   try {
@@ -70,59 +76,100 @@ const tools = [
   },
 ];
 
-//okay so basically its for the model it doenst run this part this just helps the model understand what it can do and how to do it. like the name read file and the description and the parameters it needs to run it.and one input which is path it is mandatory (ALL OF THIS IS BASICALLY JUST DATA NOT ANYTHIGN TO RUN )
-//this can have multiple things like our first is read file the second could be search web third could be save note 
 
-//The model itself remembers nothing. The list is the memory, and you carry it for the model.It’s a list stored on your computer, and it holds the conversation so far. At the start it has one entry, your question:
 
-const contents = [
-   { role: "user", parts: [{ text: "Read notes.txt, summarize it, and save the summary to summary.txt" }] },
-];
-//Turn the two calls into a loop. One generate call inside a while loop that repeats until the model stops asking for tools. This lets the agent make as many tool calls as it needs.
-//so we have a loop because we dont want to run the model once but multiple times where the user can ask multiple questions so  what we changes is we added a while loop that keeps on running till no tool request each loop it sends the whole contents list ,so the model can see evrything happened so far on lap 1 its just my question on seocnd lap its my question plus the models tool request plus the text file 
-while(true){
+
+
+const contents = [];   // memory starts empty, no hardcoded question
+
+while (true) {   // OUTER loop: keeps the chat going until you type "exit"
+
+  const question = await rl.question("You: ");   // wait for you to type
+  if (question === "exit") break;                // "exit" ends the chat
+
+  contents.push({ role: "user", parts: [{ text: question }] });   // add your question to memory(pushes into content)
+
+  while (true) {   // INNER loop: runs until the model stops asking for tools
+
     const response = await generate({
-        model:"gemini-3.5-flash-lite",
-        contents:contents,
-        config:{tools},
+      model: "gemini-3.5-flash-lite",
+      contents: contents,
+      config: {
+        tools,
+        systemInstruction:
+          "You are a study assistant. Always read a file with read_file before summarizing or quizzing on it, even if you read it earlier, because it may have changed. If a request is outside what your tools can do, say so honestly instead of guessing.",
+      },
     });
-// no tool request means the model is done: print the answer and stop 
-//If the condition is true (no tool request): run the code inside the braces. Print the answer, then break leaves the loop and the program ends.
-//If the condition is false (there is a tool request): skip everything inside the braces and continue to the lines below, which run the tool and add the result to contents. Then the loop goes back to the top for another lap.
-    if(!response.functionCalls){
-        console.log(response.text);
-        break;}
 
-    
+    if (!response.functionCalls) {
+      console.log("Agent:", response.text);   // final answer
+      break;                                   // leaves the INNER loop only
+    }
 
-    //model wants the tool:save the original reply like we did previously 
+    contents.push(response.candidates[0].content);   // save the model's tool request first before we saved the question now we save the tools needed
 
-     contents.push(response.candidates[0].content);
+    const call = response.functionCalls[0];//this is a list for tools like in a question how many tools are are asked for which ones are asked for and call holds one request 
+    console.log("Tool called:", call.name);
+    //this just shows which tools run 
 
-     //we take the models request and run the real function with the path it gave 
-const call = response.functionCalls[0];
-console.log("Tool called:", call.name);
+    let result;
+    if (call.name === "read_file") {
+      result = readFile(call.args.path);
+    } else if (call.name === "save_note") {
+      result = saveNote(call.args.filename, call.args.content);
+    } else {
+      result = `Error: unknown tool ${call.name}`;
+    }
 
-let result;//We use let instead of const because we assign to it after creating it.
-if (call.name === "read_file") {
-  result = readFile(call.args.path);
-} else if (call.name === "save_note") {
-  result = saveNote(call.args.filename, call.args.content);
-} else {
-  result = `Error: unknown tool ${call.name}`;
-}
-//The if / else if / else checks call.name, which is the tool the model asked for, and runs the matching function. This is the link between the menu (the names the model sees) and your real functions.
-//For save_note, the inputs come from call.args.filename and call.args.content. Those names match the properties in the menu entry, which is why the match mattered.
-//The final else handles a tool name you didn’t expect. It returns an error as text, and the model can read it instead of your program crashing.
-
-contents.push({ role:"user",
-    parts:[
+    contents.push({//results are pushed into content 
+      role: "user",
+      parts: [
         {
-            functionResponse:{
-                name:call.name,
-               response: { result: result },
-            },
+          functionResponse: {
+            name: call.name,
+            response: { result: result },
+          },
         },
-    ],
-});
-}
+      ],
+    });
+
+  }   // end of INNER loop
+
+}   // end of OUTER loop
+
+rl.close();   // close the input so the program can exit
+
+     
+
+
+
+
+/*Summary of code 
+START
+  |
+  v
+OUTER LOOP begins
+  |
+  1. Ask "You:" and wait for you to type
+  2. If you typed "exit" -> leave, go to the END
+  3. Push your question into contents (memory)
+  |
+  v
+  INNER LOOP begins
+    |
+    4. Call the model with ALL of contents
+    5. Did the model ask for a tool?
+         NO  -> print "Agent: ..." and break out of the inner loop
+                (go back to step 1 for your next question)
+         YES -> continue to step 6
+    6. Push the model's tool request into contents
+    7. Run the tool you asked for (readFile or saveNote)
+    8. Push the tool's result into contents
+    9. Go back to step 4 (the model now sees the result)
+  |
+  v
+OUTER LOOP repeats from step 1
+  |
+  v
+END: rl.close() and the program exits
+*/
