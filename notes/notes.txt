@@ -1,0 +1,1 @@
+Binary search works on sorted arrays. It compares the target to the middle element and discards half the array each step. Time complexity is O(log n). Linear search checks every element, so it is O(n) but works on unsorted data.

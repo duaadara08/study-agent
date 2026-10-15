@@ -1,11 +1,34 @@
 import "dotenv/config"; 
 import fs from "fs"; 
 import {GoogleGenAI} from "@google/genai";
-import readline from "readline/promises";
+import readline from "readline/promises";//module in node lets your program read what you type in the terminal one line at a time promises means function work with await so code can pause until u press enter 
+import nodePath from "path";//path module in node helps working with file paths such as joining folder and file names 
+
 
 const ai = new GoogleGenAI ({apiKey: process.env.GEMINI_API_KEY});//creates object ai - we give it our API 
 
-const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+const rl = readline.createInterface({ input: process.stdin, output: process.stdout });//creates connection that actually doe sthe reading listens to keyboard and shows prompt on screen result is stored in rl short for readline
+
+
+//so basically without the following function the model could go inside index.js file and overwrite it doesnt have any control liek that
+
+const NOTES_DIR=nodePath.resolve("notes");
+//resolve turns short name into full address on your computer and we save that as NOTES_DIR
+function safePath(filename){
+const full=nodePath.resolve(NOTES_DIR,filename);
+
+if(!full.startsWith(NOTES_DIR+nodePath.sep))
+    {
+        return null;
+    }
+return full;
+}
+/*This is the check. startsWith asks: “does the full address begin with the notes folder’s address?” (nodePath.sep is the \ between folders on Windows.)
+
+...\study-agent\notes\notes.txt starts with ...\study-agent\notes\, so it passes.
+...\study-agent\index.js does not, so the guard returns null (meaning “refused”).
+if it passed the check return full hands back the safe full address  */
+
 
 
 async function generate(request) {
@@ -24,9 +47,11 @@ async function generate(request) {
 
 
 
-function readFile(path) {
+function readFile(filename) {
+    const full=safePath(filename);
+     if (!full) return "Error: access denied. Files must be inside the notes folder.";
     try{
-        return fs.readFileSync(path,"utf-8");
+        return fs.readFileSync(full,"utf-8");
     }
     catch(err){
         return `Error reading file: ${err.message}`;
@@ -37,9 +62,12 @@ function readFile(path) {
 
 
 function saveNote(filename, content) {
+      const full=safePath(filename);
+      if (!full) return "Error: access denied. Files must be inside the notes folder.";
   try {
-    fs.writeFileSync(filename, content);
-    return `Saved to ${filename}`;
+    fs.mkdirSync(NOTES_DIR, { recursive: true });   // make notes/ if it doesn't exist
+    fs.writeFileSync(full, content)//makes notes if it doesnt exist
+    return `Saved to notes/${filename}`;
   } catch (err) {
     return `Error: could not save file (${err.message})`;
   }
@@ -55,7 +83,8 @@ const tools = [
         parameters: {
           type: "object",
           properties: {
-            path: { type: "string", description: "The path to the file to read" },
+            path: { type: "string", description: "description: Read a text file from the user's notes folder. Give only the filename, e.g. notes.txt" },//more detailed description so it has less room to guess which file we are talking about 
+
           },
           required: ["path"],
         },
@@ -66,7 +95,7 @@ const tools = [
         parameters: {
           type: "object",
           properties: {
-            filename: { type: "string", description: "Name of the file to save to, e.g. summary.txt" },
+            filename: { type: "string", description: "Save text to a file in the user's notes folder. Creates the file, or replaces it if it exists. Give only the filename, e.g. summary.txt" },
             content: { type: "string", description: "The text to write into the file" },
           },
           required: ["filename", "content"],
@@ -119,7 +148,10 @@ while (true) {   // OUTER loop: keeps the chat going until you type "exit"
       result = saveNote(call.args.filename, call.args.content);
     } else {
       result = `Error: unknown tool ${call.name}`;
+      
     }
+
+    console.log("Result:", result);
 
     contents.push({//results are pushed into content 
       role: "user",
@@ -173,3 +205,5 @@ OUTER LOOP repeats from step 1
   v
 END: rl.close() and the program exits
 */
+
+
