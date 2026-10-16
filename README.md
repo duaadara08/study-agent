@@ -96,7 +96,7 @@ Tool called: save_note { filename: 'summary.txt', ... }
 Agent: I saved the summary to summary.txt.
 ```
 
-   ![Study Agent terminal demo](images/Screenshot 2026-10-16 014039.png)
+  ![Study Agent terminal demo](images/Screenshot%202026-10-16%20014039.png)
 
 ## What I learned
 
