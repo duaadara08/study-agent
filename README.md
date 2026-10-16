@@ -62,7 +62,7 @@ Key ideas:
 1. Clone the repo and install dependencies:
 
    ```bash
-   git clone https://github.com/YOUR-USERNAME/study-agent.git
+   git clone https://github.com/duaadara08/study-agent.git
    cd study-agent
    npm install
    ```
